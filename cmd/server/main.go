@@ -18,6 +18,9 @@ import (
 	"github.com/onetrack/backend/internal/platform/config"
 	"github.com/onetrack/backend/internal/platform/database"
 	redisClient "github.com/onetrack/backend/internal/platform/redis"
+	userHandler "github.com/onetrack/backend/internal/user/handler"
+	userRepo "github.com/onetrack/backend/internal/user/repository"
+	userService "github.com/onetrack/backend/internal/user/service"
 )
 
 func main() {
@@ -72,6 +75,12 @@ func main() {
 	// Register auth routes
 	authHdlr := authHandler.NewAuthHandler(authSvc)
 	authHandler.RegisterAuthRoutes(v1, authHdlr, authMiddleware)
+
+	// Initialize user module
+	userRepository := userRepo.NewPostgresUserRepository(dbPool)
+	userSvc := userService.NewUserService(userRepository)
+	userHdlr := userHandler.NewUserHandler(userSvc)
+	userHandler.RegisterUserRoutes(v1, userHdlr, authMiddleware)
 
 	// Start server
 	srv := &http.Server{

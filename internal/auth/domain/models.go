@@ -3,15 +3,19 @@ package domain
 import "time"
 
 type User struct {
-	ID                  string    `json:"id"`
-	EmployeeCode        string    `json:"employee_code"`
-	Username            string    `json:"username"`
-	PasswordHash        string    `json:"-"`
-	ForcePasswordChange bool      `json:"force_password_change"`
-	IsActive            bool      `json:"is_active"`
+	ID                  string     `json:"id"`
+	EmployeeCode        string     `json:"employee_code"`
+	Username            string     `json:"username"`
+	FullName            string     `json:"full_name"`
+	Email               *string    `json:"email,omitempty"`
+	Phone               *string    `json:"phone,omitempty"`
+	Department          *string    `json:"department,omitempty"`
+	PasswordHash        string     `json:"-"`
+	ForcePasswordChange bool       `json:"force_password_change"`
+	IsActive            bool       `json:"is_active"`
 	LastLoginAt         *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 type Role struct {
@@ -29,8 +33,8 @@ type Permission struct {
 }
 
 type UserRole struct {
-	UserID    string    `json:"user_id"`
-	RoleID    string    `json:"role_id"`
+	UserID     string    `json:"user_id"`
+	RoleID     string    `json:"role_id"`
 	AssignedAt time.Time `json:"assigned_at"`
 }
 
