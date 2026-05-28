@@ -18,7 +18,8 @@ func NewPostgresAuthRepository(pool *pgxpool.Pool) domain.AuthRepository {
 
 func (r *postgresAuthRepo) GetUserByUsername(ctx context.Context, username string) (*domain.User, error) {
 	query := `
-		SELECT id, employee_code, username, password_hash, force_password_change, is_active, last_login_at, created_at, updated_at
+		SELECT id, employee_code, username, full_name, email, phone, department,
+		       password_hash, force_password_change, is_active, last_login_at, created_at, updated_at
 		FROM auth.users
 		WHERE username = $1
 	`
@@ -28,6 +29,10 @@ func (r *postgresAuthRepo) GetUserByUsername(ctx context.Context, username strin
 		&user.ID,
 		&user.EmployeeCode,
 		&user.Username,
+		&user.FullName,
+		&user.Email,
+		&user.Phone,
+		&user.Department,
 		&user.PasswordHash,
 		&user.ForcePasswordChange,
 		&user.IsActive,
@@ -44,7 +49,8 @@ func (r *postgresAuthRepo) GetUserByUsername(ctx context.Context, username strin
 
 func (r *postgresAuthRepo) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, employee_code, username, password_hash, force_password_change, is_active, last_login_at, created_at, updated_at
+		SELECT id, employee_code, username, full_name, email, phone, department,
+		       password_hash, force_password_change, is_active, last_login_at, created_at, updated_at
 		FROM auth.users
 		WHERE id = $1
 	`
@@ -54,6 +60,10 @@ func (r *postgresAuthRepo) GetUserByID(ctx context.Context, id string) (*domain.
 		&user.ID,
 		&user.EmployeeCode,
 		&user.Username,
+		&user.FullName,
+		&user.Email,
+		&user.Phone,
+		&user.Department,
 		&user.PasswordHash,
 		&user.ForcePasswordChange,
 		&user.IsActive,
