@@ -14,10 +14,16 @@ import (
 	authHandler "github.com/onetrack/backend/internal/auth/handler"
 	authRepo "github.com/onetrack/backend/internal/auth/repository"
 	authService "github.com/onetrack/backend/internal/auth/service"
+	bidHandler "github.com/onetrack/backend/internal/bid/handler"
+	bidRepo "github.com/onetrack/backend/internal/bid/repository"
+	bidService "github.com/onetrack/backend/internal/bid/service"
 	"github.com/onetrack/backend/internal/middleware"
 	"github.com/onetrack/backend/internal/platform/config"
 	"github.com/onetrack/backend/internal/platform/database"
 	redisClient "github.com/onetrack/backend/internal/platform/redis"
+	taskHandler "github.com/onetrack/backend/internal/task/handler"
+	taskRepo "github.com/onetrack/backend/internal/task/repository"
+	taskService "github.com/onetrack/backend/internal/task/service"
 	userHandler "github.com/onetrack/backend/internal/user/handler"
 	userRepo "github.com/onetrack/backend/internal/user/repository"
 	userService "github.com/onetrack/backend/internal/user/service"
@@ -81,6 +87,18 @@ func main() {
 	userSvc := userService.NewUserService(userRepository)
 	userHdlr := userHandler.NewUserHandler(userSvc)
 	userHandler.RegisterUserRoutes(v1, userHdlr, authMiddleware)
+
+	// Initialize bid module
+	bidRepository := bidRepo.NewPostgresBidRepository(dbPool)
+	bidSvc := bidService.NewBidService(bidRepository)
+	bidHdlr := bidHandler.NewBidHandler(bidSvc)
+	bidHandler.RegisterBidRoutes(v1, bidHdlr, authMiddleware)
+
+	// Initialize task module (shared surface for MANUAL + INTELLIGENCE modes)
+	taskRepository := taskRepo.NewPostgresTaskRepository(dbPool)
+	taskSvc := taskService.NewTaskService(taskRepository)
+	taskHdlr := taskHandler.NewTaskHandler(taskSvc)
+	taskHandler.RegisterTaskRoutes(v1, taskHdlr, authMiddleware)
 
 	// Start server
 	srv := &http.Server{
