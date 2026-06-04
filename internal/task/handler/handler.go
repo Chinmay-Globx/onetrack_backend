@@ -268,6 +268,138 @@ func (h *TaskHandler) DeleteChecklist(c *gin.Context) {
 	response.Success(c, http.StatusOK, "Checklist item removed", nil)
 }
 
+// ────────────────────────────────────────
+// My Tasks: GET /me/tasks
+// ────────────────────────────────────────
+
+func (h *TaskHandler) MyTasks(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	overdue := false
+	if c.Query("overdue") == "true" {
+		overdue = true
+	}
+
+	params := domain.MyTasksParams{
+		UserID:   userID,
+		Status:   c.Query("status"),
+		Priority: c.Query("priority"),
+		TaskType: c.Query("task_type"),
+		Overdue:  overdue,
+		Page:     parseIntQuery(c, "page", 1),
+		Limit:    parseIntQuery(c, "limit", 20),
+	}
+
+	result, err := h.svc.ListMyTasks(c.Request.Context(), params)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result.Tasks,
+		"meta": gin.H{
+			"page":        result.Page,
+			"limit":       result.Limit,
+			"total":       result.Total,
+			"total_pages": result.TotalPages,
+		},
+	})
+}
+
+// ────────────────────────────────────────
+// Typed task creation under a bid
+// ────────────────────────────────────────
+
+func (h *TaskHandler) CreateApprovalTask(c *gin.Context) {
+	bidID := c.Param("id")
+	var req domain.CreateApprovalTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	actorID := c.GetString("user_id")
+	task, err := h.svc.CreateApprovalTask(c.Request.Context(), bidID, &req, actorID)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusCreated, "Approval task created", task)
+}
+
+func (h *TaskHandler) CreateOEMTask(c *gin.Context) {
+	bidID := c.Param("id")
+	var req domain.CreateOEMTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	actorID := c.GetString("user_id")
+	task, err := h.svc.CreateOEMTask(c.Request.Context(), bidID, &req, actorID)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusCreated, "OEM coordination task created", task)
+}
+
+func (h *TaskHandler) CreateDocumentTask(c *gin.Context) {
+	bidID := c.Param("id")
+	var req domain.CreateDocumentTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	actorID := c.GetString("user_id")
+	task, err := h.svc.CreateDocumentTask(c.Request.Context(), bidID, &req, actorID)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusCreated, "Document collection task created", task)
+}
+
+// ────────────────────────────────────────
+// APPROVAL task: POST /tasks/:id/approve
+// ────────────────────────────────────────
+
+func (h *TaskHandler) SubmitApprovalDecision(c *gin.Context) {
+	taskID := c.Param("id")
+	var req domain.SubmitApprovalDecisionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	actorID := c.GetString("user_id")
+	task, err := h.svc.SubmitApprovalDecision(c.Request.Context(), taskID, &req, actorID)
+	if err != nil {
+		response.Conflict(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Approval decision recorded", task)
+}
+
+// ────────────────────────────────────────
+// OEM task: POST /tasks/:id/oem-followup
+// ────────────────────────────────────────
+
+func (h *TaskHandler) AddOEMFollowUp(c *gin.Context) {
+	taskID := c.Param("id")
+	var req domain.AddOEMFollowUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	actorID := c.GetString("user_id")
+	task, err := h.svc.AddOEMFollowUp(c.Request.Context(), taskID, &req, actorID)
+	if err != nil {
+		response.Conflict(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "OEM follow-up recorded", task)
+}
+
 func parseIntQuery(c *gin.Context, key string, def int) int {
 	v := c.Query(key)
 	if v == "" {

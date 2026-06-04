@@ -209,6 +209,92 @@ func (r *postgresTaskRepo) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *postgresTaskRepo) UpdateMetadata(ctx context.Context, id string, metadata []byte) error {
+	_, err := r.pool.Exec(ctx,
+		"UPDATE task.tasks SET metadata = $1, updated_at = NOW() WHERE id = $2",
+		metadata, id,
+	)
+	return err
+}
+
+func (r *postgresTaskRepo) ListByAssignee(ctx context.Context, params domain.MyTasksParams) ([]domain.Task, int, error) {
+	conditions := []string{"t.assigned_to = $1", "t.status != 'CANCELLED'"}
+	args := []interface{}{params.UserID}
+	idx := 2
+
+	if params.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("t.status = $%d", idx))
+		args = append(args, params.Status)
+		idx++
+	}
+	if params.Priority != "" {
+		conditions = append(conditions, fmt.Sprintf("t.priority = $%d", idx))
+		args = append(args, params.Priority)
+		idx++
+	}
+	if params.TaskType != "" {
+		conditions = append(conditions, fmt.Sprintf("t.task_type = $%d", idx))
+		args = append(args, params.TaskType)
+		idx++
+	}
+	if params.Overdue {
+		conditions = append(conditions, "t.due_date < NOW()")
+		conditions = append(conditions, "t.status NOT IN ('COMPLETED','CANCELLED')")
+	}
+
+	where := "WHERE " + strings.Join(conditions, " AND ")
+
+	var total int
+	if err := r.pool.QueryRow(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM task.tasks t %s", where), args...,
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count my tasks: %w", err)
+	}
+
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.Limit < 1 {
+		params.Limit = 20
+	}
+	offset := (params.Page - 1) * params.Limit
+	listArgs := append(args, params.Limit, offset)
+
+	query := fmt.Sprintf(`
+		SELECT id, bid_id, parent_task_id, task_type, task_category, title, description,
+		       status, priority, assigned_to, created_by,
+		       due_date, sla_deadline, completion_percentage,
+		       source, ai_confidence, metadata,
+		       created_at, updated_at
+		FROM task.tasks t
+		%s
+		ORDER BY
+		  CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
+		  due_date ASC NULLS LAST,
+		  created_at ASC
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1)
+
+	rows, err := r.pool.Query(ctx, query, listArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list my tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []domain.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		tasks = append(tasks, *t)
+	}
+	if tasks == nil {
+		tasks = []domain.Task{}
+	}
+	return tasks, total, nil
+}
+
 func (r *postgresTaskRepo) CountSubtasks(ctx context.Context, parentID string) (int, error) {
 	var count int
 	err := r.pool.QueryRow(ctx,
@@ -345,6 +431,18 @@ func (r *postgresTaskRepo) GetUserSummary(ctx context.Context, userID string) (*
 		return nil, err
 	}
 	return &u, nil
+}
+
+func (r *postgresTaskRepo) GetBidTitle(ctx context.Context, bidID string) (string, error) {
+	var title string
+	err := r.pool.QueryRow(ctx,
+		"SELECT COALESCE(title, bid_no, 'Untitled Bid') FROM bid.bid_workspaces WHERE id = $1",
+		bidID,
+	).Scan(&title)
+	if err != nil {
+		return "", err
+	}
+	return title, nil
 }
 
 // ────────────────────────────────────────

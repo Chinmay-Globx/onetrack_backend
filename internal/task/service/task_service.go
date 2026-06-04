@@ -117,6 +117,31 @@ func (s *taskService) UpdateStatus(ctx context.Context, id string, req *domain.U
 		return fmt.Errorf("task is already %s", task.Status)
 	}
 
+	// Completion guards — enforce type-specific prerequisites
+	if req.Status == domain.StatusCompleted && domain.IsGuardedType(task.TaskType) {
+		var meta map[string]interface{}
+		if len(task.Metadata) > 0 {
+			_ = json.Unmarshal(task.Metadata, &meta)
+		}
+		switch task.TaskType {
+		case domain.TypeApproval:
+			decision, _ := meta["approval_decision"].(string)
+			if decision == "" {
+				return fmt.Errorf("approval task requires a recorded decision before completion")
+			}
+		case domain.TypeOEMCoordination:
+			state, _ := meta["oem_state"].(string)
+			if state != domain.OEMStateCompleted && state != domain.OEMStateRejected {
+				return fmt.Errorf("OEM task must reach COMPLETED or REJECTED state before closing")
+			}
+		case domain.TypeDocumentCollection:
+			uploaded, _ := meta["required_docs_uploaded"].(bool)
+			if !uploaded {
+				return fmt.Errorf("all required documents must be uploaded before completing this task")
+			}
+		}
+	}
+
 	prevStatus := task.Status
 	if err := s.repo.UpdateStatus(ctx, id, req.Status); err != nil {
 		return err
@@ -364,6 +389,250 @@ func (s *taskService) enrichTask(ctx context.Context, t *domain.Task) (*domain.T
 	resp.ChecklistCount, resp.ChecklistDoneCount, _ = s.repo.CountChecklists(ctx, t.ID)
 
 	return resp, nil
+}
+
+// ────────────────────────────────────────
+// My Tasks — cross-bid view
+// ────────────────────────────────────────
+
+func (s *taskService) ListMyTasks(ctx context.Context, params domain.MyTasksParams) (*domain.MyTasksResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.Limit < 1 || params.Limit > 100 {
+		params.Limit = 20
+	}
+
+	tasks, total, err := s.repo.ListByAssignee(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a local bid-title cache to avoid N+1 — one DB call per unique bid_id
+	bidTitleCache := make(map[string]string)
+
+	items := make([]domain.TaskResponse, 0, len(tasks))
+	for _, t := range tasks {
+		resp, err := s.enrichTask(ctx, &t)
+		if err != nil {
+			continue
+		}
+
+		// Resolve bid title — hit cache first
+		if title, ok := bidTitleCache[t.BidID]; ok {
+			resp.BidTitle = title
+		} else {
+			title, err := s.repo.GetBidTitle(ctx, t.BidID)
+			if err == nil {
+				bidTitleCache[t.BidID] = title
+				resp.BidTitle = title
+			} else {
+				bidTitleCache[t.BidID] = "" // don't retry failed lookups
+			}
+		}
+
+		items = append(items, *resp)
+	}
+
+	return &domain.MyTasksResponse{
+		Tasks:      items,
+		Total:      total,
+		Page:       params.Page,
+		Limit:      params.Limit,
+		TotalPages: int(math.Ceil(float64(total) / float64(params.Limit))),
+	}, nil
+}
+
+// ────────────────────────────────────────
+// Typed task creation
+// ────────────────────────────────────────
+
+func (s *taskService) CreateApprovalTask(ctx context.Context, bidID string, req *domain.CreateApprovalTaskRequest, createdBy string) (*domain.TaskResponse, error) {
+	meta := domain.ApprovalTaskMetadata{
+		ApproverID: req.ApproverID,
+	}
+	metaBytes, _ := json.Marshal(meta)
+	metaStr := string(metaBytes)
+
+	genericReq := &domain.CreateTaskRequest{
+		TaskType:    domain.TypeApproval,
+		Title:       req.Title,
+		Description: req.Description,
+		Priority:    req.Priority,
+		AssignedTo:  &req.ApproverID,
+		DueDate:     req.DueDate,
+		SLADeadline: req.SLADeadline,
+		Metadata:    &metaStr,
+	}
+	return s.CreateTask(ctx, bidID, genericReq, createdBy)
+}
+
+func (s *taskService) CreateOEMTask(ctx context.Context, bidID string, req *domain.CreateOEMTaskRequest, createdBy string) (*domain.TaskResponse, error) {
+	meta := domain.OEMTaskMetadata{
+		OEMName:       req.OEMName,
+		ContactPerson: req.ContactPerson,
+		ContactEmail:  req.ContactEmail,
+		ContactPhone:  req.ContactPhone,
+		MAFRequired:   req.MAFRequired,
+		OEMState:      domain.OEMStateRequestInitiated,
+	}
+	metaBytes, _ := json.Marshal(meta)
+	metaStr := string(metaBytes)
+
+	genericReq := &domain.CreateTaskRequest{
+		TaskType:    domain.TypeOEMCoordination,
+		Title:       req.Title,
+		Description: req.Description,
+		Priority:    req.Priority,
+		AssignedTo:  req.AssignedTo,
+		DueDate:     req.DueDate,
+		SLADeadline: req.SLADeadline,
+		Metadata:    &metaStr,
+	}
+	return s.CreateTask(ctx, bidID, genericReq, createdBy)
+}
+
+func (s *taskService) CreateDocumentTask(ctx context.Context, bidID string, req *domain.CreateDocumentTaskRequest, createdBy string) (*domain.TaskResponse, error) {
+	meta := domain.DocumentTaskMetadata{
+		RequiredDocs:         req.RequiredDocs,
+		UploadedDocs:         []string{},
+		RequiredDocsUploaded: false,
+	}
+	metaBytes, _ := json.Marshal(meta)
+	metaStr := string(metaBytes)
+
+	genericReq := &domain.CreateTaskRequest{
+		TaskType:    domain.TypeDocumentCollection,
+		Title:       req.Title,
+		Description: req.Description,
+		Priority:    req.Priority,
+		AssignedTo:  req.AssignedTo,
+		DueDate:     req.DueDate,
+		SLADeadline: req.SLADeadline,
+		Metadata:    &metaStr,
+	}
+	return s.CreateTask(ctx, bidID, genericReq, createdBy)
+}
+
+// ────────────────────────────────────────
+// APPROVAL task — submit decision
+// ────────────────────────────────────────
+
+func (s *taskService) SubmitApprovalDecision(ctx context.Context, taskID string, req *domain.SubmitApprovalDecisionRequest, actorID string) (*domain.TaskResponse, error) {
+	task, err := s.repo.GetByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task.TaskType != domain.TypeApproval {
+		return nil, fmt.Errorf("task is not an APPROVAL type")
+	}
+	validDecisions := map[string]bool{
+		domain.ApprovalDecisionApprove: true,
+		domain.ApprovalDecisionReject:  true,
+		domain.ApprovalDecisionDefer:   true,
+	}
+	if !validDecisions[req.Decision] {
+		return nil, fmt.Errorf("invalid decision: must be APPROVED, REJECTED, or DEFERRED")
+	}
+
+	// Load existing metadata and update decision fields
+	var meta domain.ApprovalTaskMetadata
+	if len(task.Metadata) > 0 {
+		_ = json.Unmarshal(task.Metadata, &meta)
+	}
+	meta.ApprovalDecision = req.Decision
+	meta.DecisionComment = req.Comment
+	meta.DecisionAt = time.Now().UTC().Format(time.RFC3339)
+
+	metaBytes, _ := json.Marshal(meta)
+	if err := s.repo.UpdateMetadata(ctx, taskID, metaBytes); err != nil {
+		return nil, fmt.Errorf("update approval metadata: %w", err)
+	}
+
+	// Auto-transition status to UNDER_REVIEW once a decision is recorded (if not already terminal)
+	if task.Status != domain.StatusCompleted && task.Status != domain.StatusCancelled {
+		_ = s.repo.UpdateStatus(ctx, taskID, domain.StatusUnderReview)
+	}
+
+	// Log activity
+	activityType := domain.ActivityApprovalGranted
+	if req.Decision == domain.ApprovalDecisionReject {
+		activityType = domain.ActivityApprovalRejected
+	}
+	data, _ := json.Marshal(map[string]string{
+		"decision": req.Decision,
+		"comment":  req.Comment,
+	})
+	_, _ = s.repo.AddActivity(ctx, taskID, activityType, data, actorID)
+
+	return s.GetTask(ctx, taskID)
+}
+
+// ────────────────────────────────────────
+// OEM task — add follow-up
+// ────────────────────────────────────────
+
+func (s *taskService) AddOEMFollowUp(ctx context.Context, taskID string, req *domain.AddOEMFollowUpRequest, actorID string) (*domain.TaskResponse, error) {
+	task, err := s.repo.GetByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task.TaskType != domain.TypeOEMCoordination {
+		return nil, fmt.Errorf("task is not an OEM_COORDINATION type")
+	}
+
+	validStates := map[string]bool{
+		domain.OEMStateRequestInitiated: true,
+		domain.OEMStateFollowUpPending:  true,
+		domain.OEMStateResponseReceived: true,
+		domain.OEMStateDocumentPending:  true,
+		domain.OEMStateCompleted:        true,
+		domain.OEMStateRejected:         true,
+		domain.OEMStateEscalated:        true,
+	}
+	if !validStates[req.NewOEMState] {
+		return nil, fmt.Errorf("invalid oem_state: %s", req.NewOEMState)
+	}
+
+	// Load existing metadata and update OEM fields
+	var meta domain.OEMTaskMetadata
+	if len(task.Metadata) > 0 {
+		_ = json.Unmarshal(task.Metadata, &meta)
+	}
+	meta.OEMState = req.NewOEMState
+	meta.LastFollowUpAt = time.Now().UTC().Format(time.RFC3339)
+	if req.ResponseStatus != "" {
+		meta.ResponseStatus = req.ResponseStatus
+	}
+
+	metaBytes, _ := json.Marshal(meta)
+	if err := s.repo.UpdateMetadata(ctx, taskID, metaBytes); err != nil {
+		return nil, fmt.Errorf("update OEM metadata: %w", err)
+	}
+
+	// Auto-set task status based on OEM state
+	newStatus := ""
+	switch req.NewOEMState {
+	case domain.OEMStateResponseReceived, domain.OEMStateDocumentPending:
+		newStatus = domain.StatusInProgress
+	case domain.OEMStateEscalated:
+		newStatus = domain.StatusEscalated
+	case domain.OEMStateCompleted, domain.OEMStateRejected:
+		newStatus = domain.StatusUnderReview
+	}
+	if newStatus != "" && task.Status != domain.StatusCompleted {
+		_ = s.repo.UpdateStatus(ctx, taskID, newStatus)
+	}
+
+	// Log follow-up activity
+	data, _ := json.Marshal(map[string]string{
+		"note":            req.Note,
+		"oem_state":       req.NewOEMState,
+		"response_status": req.ResponseStatus,
+	})
+	_, _ = s.repo.AddActivity(ctx, taskID, domain.ActivityOEMFollowUp, data, actorID)
+
+	return s.GetTask(ctx, taskID)
 }
 
 func buildCreateParams(
