@@ -13,15 +13,29 @@ import (
 // task sub-resources while keeping task management centralized for both
 // MANUAL and INTELLIGENCE modes.
 func RegisterTaskRoutes(router *gin.RouterGroup, handler *TaskHandler, authMiddleware *middleware.AuthMiddleware) {
-	// Tasks under a bid workspace
+	// ── My Tasks: cross-bid view for the authenticated user ──────────────────
+	me := router.Group("/me")
+	me.Use(authMiddleware.Authenticate())
+	{
+		me.GET("/tasks", authMiddleware.RequirePermission("task.view"), handler.MyTasks)
+	}
+
+	// ── Tasks scoped to a bid workspace ──────────────────────────────────────
 	bidTasks := router.Group("/bids/:id/tasks")
 	bidTasks.Use(authMiddleware.Authenticate())
 	{
+		// Generic task creation (any task_type via task_type field)
 		bidTasks.POST("", authMiddleware.RequirePermission("task.create"), handler.CreateTask)
 		bidTasks.GET("", authMiddleware.RequirePermission("task.view"), handler.ListTasksForBid)
+
+		// Typed task creation — dedicated endpoints per type
+		// These set the correct metadata structure at creation time
+		bidTasks.POST("/approval", authMiddleware.RequirePermission("task.create"), handler.CreateApprovalTask)
+		bidTasks.POST("/oem", authMiddleware.RequirePermission("task.create"), handler.CreateOEMTask)
+		bidTasks.POST("/document", authMiddleware.RequirePermission("task.create"), handler.CreateDocumentTask)
 	}
 
-	// Individual task operations
+	// ── Individual task operations ────────────────────────────────────────────
 	tasks := router.Group("/tasks")
 	tasks.Use(authMiddleware.Authenticate())
 	{
@@ -31,6 +45,10 @@ func RegisterTaskRoutes(router *gin.RouterGroup, handler *TaskHandler, authMiddl
 
 		tasks.PATCH("/:id/status", authMiddleware.RequirePermission("task.edit"), handler.UpdateStatus)
 		tasks.PATCH("/:id/assign", authMiddleware.RequirePermission("task.assign"), handler.AssignTask)
+
+		// Type-specific action endpoints
+		tasks.POST("/:id/approve", authMiddleware.RequirePermission("task.edit"), handler.SubmitApprovalDecision)
+		tasks.POST("/:id/oem-followup", authMiddleware.RequirePermission("task.edit"), handler.AddOEMFollowUp)
 
 		// Subtasks
 		tasks.POST("/:id/subtasks", authMiddleware.RequirePermission("task.create"), handler.CreateSubtask)

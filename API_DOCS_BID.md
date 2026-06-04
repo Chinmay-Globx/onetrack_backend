@@ -784,6 +784,358 @@ Subtasks inherit `bid_id` from parent task. `parent_task_id` is set automaticall
 
 ---
 
+# PART 2B — TYPED TASK APIs
+
+These endpoints replace the generic `POST /bids/{id}/tasks` when creating tasks that carry structured metadata. Each typed endpoint validates the required fields for that task type and initialises the correct metadata blob automatically.
+
+---
+
+## GET /api/v1/me/tasks
+
+**My Tasks — Cross-Bid Dashboard View**
+
+Returns all tasks assigned to the currently authenticated user across every bid workspace, ordered by priority then due date.
+
+**Permission:** `task.view`
+
+### Query Parameters
+
+| Param       | Type    | Description                                     |
+| ----------- | ------- | ----------------------------------------------- |
+| `status`    | string  | Filter by task status                           |
+| `priority`  | string  | Filter by priority                              |
+| `task_type` | string  | Filter by task type                             |
+| `overdue`   | boolean | `true` — only tasks past their `due_date`       |
+| `page`      | int     | Page number (default: 1)                        |
+| `limit`     | int     | Page size (default: 20, max: 100)               |
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "task-uuid",
+      "bid_id": "bid-uuid",
+      "bid_title": "Supply of Laptops & Accessories — GeM 2026",
+      "task_type": "APPROVAL",
+      "title": "Final Quotation Approval",
+      "status": "ASSIGNED",
+      "priority": "CRITICAL",
+      "due_date": "2026-06-15T17:00:00Z",
+      "assigned_to": { "id": "uuid", "full_name": "Rahul Sharma", "username": "rahul" },
+      "metadata": { "approver_id": "uuid", "approval_decision": "" }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 5,
+    "total_pages": 1
+  }
+}
+```
+
+---
+
+## POST /api/v1/bids/{id}/tasks/approval
+
+**Create an Approval Task**
+
+Use this instead of the generic task endpoint when you need a formal approval task. The `approver_id` user is auto-assigned to the task and the metadata is structured for the approval decision workflow.
+
+**Permission:** `task.create`
+
+### Request
+
+| Field         | Type   | Required | Description                        |
+| ------------- | ------ | -------- | ---------------------------------- |
+| `title`       | string | Yes      | Title of the approval task         |
+| `description` | string | No       | Context / instructions             |
+| `approver_id` | UUID   | Yes      | User UUID who must approve         |
+| `priority`    | string | No       | `LOW \| MEDIUM \| HIGH \| CRITICAL` |
+| `due_date`    | string | No       | RFC3339 datetime                   |
+| `sla_deadline`| string | No       | RFC3339 datetime                   |
+
+```json
+{
+  "title": "Management Approval — Final Quotation Submission",
+  "description": "Requires sign-off from Director before GeM submission.",
+  "approver_id": "b3f1c2a4-0000-4abc-9def-director001",
+  "priority": "CRITICAL",
+  "due_date": "2026-06-14T17:00:00Z"
+}
+```
+
+### Response — 201 Created
+
+```json
+{
+  "success": true,
+  "message": "Approval task created",
+  "data": {
+    "id": "task-uuid",
+    "task_type": "APPROVAL",
+    "status": "ASSIGNED",
+    "assigned_to": { "id": "director-uuid", "full_name": "Director Name" },
+    "metadata": {
+      "approver_id": "director-uuid",
+      "approval_decision": "",
+      "decision_comment": "",
+      "decision_at": ""
+    }
+  }
+}
+```
+
+### Completion Guard
+
+This task **cannot be marked `COMPLETED`** unless an approval decision (`APPROVED`, `REJECTED`, or `DEFERRED`) has been recorded via `POST /tasks/{id}/approve`.
+
+---
+
+## POST /api/v1/tasks/{id}/approve
+
+**Submit Approval Decision**
+
+The approver calls this endpoint to record their decision. The task status auto-transitions to `UNDER_REVIEW` and the metadata is updated. After this, the task owner can mark it `COMPLETED`.
+
+**Permission:** `task.edit`
+
+### Request
+
+| Field      | Type   | Required | Description                              |
+| ---------- | ------ | -------- | ---------------------------------------- |
+| `decision` | string | Yes      | `APPROVED \| REJECTED \| DEFERRED`       |
+| `comment`  | string | No       | Reason or notes for the decision         |
+
+```json
+{
+  "decision": "APPROVED",
+  "comment": "Quotation is within budget. Cleared for submission."
+}
+```
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "message": "Approval decision recorded",
+  "data": {
+    "id": "task-uuid",
+    "status": "UNDER_REVIEW",
+    "metadata": {
+      "approver_id": "director-uuid",
+      "approval_decision": "APPROVED",
+      "decision_comment": "Quotation is within budget. Cleared for submission.",
+      "decision_at": "2026-06-13T11:45:00Z"
+    }
+  }
+}
+```
+
+### Auto-Logged Activity
+
+- `APPROVAL_GRANTED` — when decision is `APPROVED` or `DEFERRED`
+- `APPROVAL_REJECTED` — when decision is `REJECTED`
+
+---
+
+## POST /api/v1/bids/{id}/tasks/oem
+
+**Create an OEM Coordination Task**
+
+Creates a task specifically for tracking OEM authorisation letter (MAF) collection. Sets the OEM lifecycle to `REQUEST_INITIATED` automatically.
+
+**Permission:** `task.create`
+
+### Request
+
+| Field            | Type    | Required | Description                                       |
+| ---------------- | ------- | -------- | ------------------------------------------------- |
+| `title`          | string  | Yes      | e.g. "Collect MAF from Cisco India"               |
+| `description`    | string  | No       | Additional context                                |
+| `oem_name`       | string  | Yes      | OEM partner name                                  |
+| `contact_person` | string  | Yes      | Name of OEM contact                               |
+| `contact_email`  | string  | No       | Email address                                     |
+| `contact_phone`  | string  | No       | Phone number                                      |
+| `maf_required`   | boolean | No       | Whether MAF/authorization letter is required      |
+| `priority`       | string  | No       | `LOW \| MEDIUM \| HIGH \| CRITICAL`               |
+| `assigned_to`    | UUID    | No       | User responsible for OEM coordination             |
+| `due_date`       | string  | No       | RFC3339 datetime                                  |
+| `sla_deadline`   | string  | No       | RFC3339 datetime for escalation trigger           |
+
+```json
+{
+  "title": "Collect MAF from Cisco India",
+  "oem_name": "Cisco Systems India",
+  "contact_person": "Rajesh Kumar",
+  "contact_email": "rajesh.kumar@cisco.com",
+  "contact_phone": "+91-9876543210",
+  "maf_required": true,
+  "priority": "HIGH",
+  "assigned_to": "user-uuid-001",
+  "due_date": "2026-06-20T17:00:00Z"
+}
+```
+
+### Response — 201 Created
+
+```json
+{
+  "success": true,
+  "message": "OEM coordination task created",
+  "data": {
+    "id": "task-uuid",
+    "task_type": "OEM_COORDINATION",
+    "status": "ASSIGNED",
+    "metadata": {
+      "oem_name": "Cisco Systems India",
+      "contact_person": "Rajesh Kumar",
+      "contact_email": "rajesh.kumar@cisco.com",
+      "maf_required": true,
+      "oem_state": "REQUEST_INITIATED",
+      "last_follow_up_at": ""
+    }
+  }
+}
+```
+
+### Completion Guard
+
+This task **cannot be marked `COMPLETED`** unless `oem_state` is `COMPLETED` or `REJECTED`.
+
+---
+
+## POST /api/v1/tasks/{id}/oem-followup
+
+**Record OEM Follow-Up**
+
+Called each time the team follows up with the OEM. Updates the OEM lifecycle state and auto-adjusts task status accordingly.
+
+**Permission:** `task.edit`
+
+### Request
+
+| Field            | Type   | Required | Description                                                         |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `note`           | string | Yes      | Summary of the follow-up interaction                                |
+| `new_oem_state`  | string | Yes      | New OEM lifecycle state (see table below)                          |
+| `response_status`| string | No       | Free-text status update from OEM                                    |
+
+**OEM State Values:**
+
+| State              | Meaning                         | Auto Task Status |
+| ------------------ | ------------------------------- | ---------------- |
+| `REQUEST_INITIATED`| First contact made              | —                |
+| `FOLLOW_UP_PENDING`| Awaiting OEM response           | —                |
+| `RESPONSE_RECEIVED`| OEM responded positively        | `IN_PROGRESS`    |
+| `DOCUMENT_PENDING` | Waiting for MAF document        | `IN_PROGRESS`    |
+| `COMPLETED`        | MAF/document received           | `UNDER_REVIEW`   |
+| `REJECTED`         | OEM refused                     | `UNDER_REVIEW`   |
+| `ESCALATED`        | No response after SLA breach    | `ESCALATED`      |
+
+```json
+{
+  "note": "Spoke to Rajesh. MAF is in review by their legal team. Expected in 3 days.",
+  "new_oem_state": "FOLLOW_UP_PENDING",
+  "response_status": "Under internal review at OEM"
+}
+```
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "message": "OEM follow-up recorded",
+  "data": {
+    "id": "task-uuid",
+    "status": "WAITING_EXTERNAL",
+    "metadata": {
+      "oem_name": "Cisco Systems India",
+      "oem_state": "FOLLOW_UP_PENDING",
+      "last_follow_up_at": "2026-06-06T10:00:00Z",
+      "response_status": "Under internal review at OEM"
+    }
+  }
+}
+```
+
+### Auto-Logged Activity
+
+Every follow-up automatically logs an `OEM_FOLLOW_UP` entry in the activity timeline with the note and state transition.
+
+---
+
+## POST /api/v1/bids/{id}/tasks/document
+
+**Create a Document Collection Task**
+
+Creates a task specifically for collecting and uploading required documents. Initialises with a list of required documents that must all be marked uploaded before the task can be completed.
+
+**Permission:** `task.create`
+
+### Request
+
+| Field           | Type     | Required | Description                                      |
+| --------------- | -------- | -------- | ------------------------------------------------ |
+| `title`         | string   | Yes      | e.g. "Upload EMD Receipt"                        |
+| `description`   | string   | No       | Additional context                               |
+| `required_docs` | string[] | No       | List of required document names                  |
+| `priority`      | string   | No       | `LOW \| MEDIUM \| HIGH \| CRITICAL`              |
+| `assigned_to`   | UUID     | No       | User responsible                                 |
+| `due_date`      | string   | No       | RFC3339 datetime                                 |
+| `sla_deadline`  | string   | No       | RFC3339 datetime for escalation trigger          |
+
+```json
+{
+  "title": "Upload Pre-Qualification Documents",
+  "description": "Upload all financial and technical eligibility documents.",
+  "required_docs": [
+    "GST Registration Certificate",
+    "Audited Balance Sheet FY2024-25",
+    "Turnover Certificate",
+    "OEM Authorization Letter"
+  ],
+  "priority": "HIGH",
+  "assigned_to": "user-uuid-001",
+  "due_date": "2026-06-18T17:00:00Z"
+}
+```
+
+### Response — 201 Created
+
+```json
+{
+  "success": true,
+  "message": "Document collection task created",
+  "data": {
+    "id": "task-uuid",
+    "task_type": "DOCUMENT_COLLECTION",
+    "status": "ASSIGNED",
+    "metadata": {
+      "required_docs": [
+        "GST Registration Certificate",
+        "Audited Balance Sheet FY2024-25",
+        "Turnover Certificate",
+        "OEM Authorization Letter"
+      ],
+      "uploaded_docs": [],
+      "required_docs_uploaded": false
+    }
+  }
+}
+```
+
+### Completion Guard
+
+This task **cannot be marked `COMPLETED`** unless `metadata.required_docs_uploaded` is `true`. This flag is set to `true` by the document upload handler (future Document Intelligence module) once all required docs are uploaded.
+
+---
+
 # PART 3 — PERMISSIONS REFERENCE
 
 ## Required Permissions
