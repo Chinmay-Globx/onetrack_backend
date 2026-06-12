@@ -30,7 +30,9 @@ func (r *postgresBidRepo) Create(ctx context.Context, bid *domain.CreateBidParam
 			oem_required, has_tech_eval,
 			opening_date, closing_date,
 			category, bid_type, gem_bid_type,
-			remarks, metadata
+			remarks, metadata,
+			team, scope_type, bg_rate, activity_type, target_month_date,
+			excel_bid_status, submission_status, financial_evaluation_status, po_received_status
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
@@ -39,7 +41,9 @@ func (r *postgresBidRepo) Create(ctx context.Context, bid *domain.CreateBidParam
 			$16, $17,
 			$18, $19,
 			$20, $21, $22,
-			$23, $24
+			$23, $24,
+			$25, $26, $27, $28, $29,
+			$30, $31, $32, $33
 		) RETURNING id
 	`
 	var id string
@@ -52,6 +56,8 @@ func (r *postgresBidRepo) Create(ctx context.Context, bid *domain.CreateBidParam
 		bid.OpeningDate, bid.ClosingDate,
 		bid.Category, bid.BidType, bid.GemBidType,
 		bid.Remarks, bid.Metadata,
+		bid.Team, bid.ScopeType, bid.BGRate, bid.ActivityType, bid.TargetMonthDate,
+		bid.ExcelBidStatus, bid.SubmissionStatus, bid.FinancialEvaluationStatus, bid.POReceivedStatus,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("failed to create bid: %w", err)
@@ -71,7 +77,9 @@ func (r *postgresBidRepo) GetByID(ctx context.Context, id string) (*domain.BidWo
 		       qualification_status, bid_outcome, outcome_reason, tech_compliance_status,
 		       remarks, competitor_info, metadata,
 		       ai_source_document_id, ai_extraction_confidence,
-		       created_at, updated_at, archived_at
+		       created_at, updated_at, archived_at,
+		       team, scope_type, bg_rate, activity_type, target_month_date,
+		       excel_bid_status, submission_status, financial_evaluation_status, po_received_status
 		FROM bid.bid_workspaces
 		WHERE id = $1 AND archived_at IS NULL
 	`
@@ -160,7 +168,9 @@ func (r *postgresBidRepo) List(ctx context.Context, params domain.ListBidsParams
 		       b.qualification_status, b.bid_outcome, b.outcome_reason, b.tech_compliance_status,
 		       b.remarks, b.competitor_info, b.metadata,
 		       b.ai_source_document_id, b.ai_extraction_confidence,
-		       b.created_at, b.updated_at, b.archived_at
+		       b.created_at, b.updated_at, b.archived_at,
+		       b.team, b.scope_type, b.bg_rate, b.activity_type, b.target_month_date,
+		       b.excel_bid_status, b.submission_status, b.financial_evaluation_status, b.po_received_status
 		FROM bid.bid_workspaces b
 		%s
 		ORDER BY b.created_at DESC
@@ -275,6 +285,36 @@ func (r *postgresBidRepo) Update(ctx context.Context, id string, req *domain.Upd
 	}
 	if req.Remarks != nil {
 		addSet("remarks", *req.Remarks)
+	}
+	if req.Team != nil {
+		addSet("team", *req.Team)
+	}
+	if req.ScopeType != nil {
+		addSet("scope_type", *req.ScopeType)
+	}
+	if req.BGRate != nil {
+		addSet("bg_rate", *req.BGRate)
+	}
+	if req.ActivityType != nil {
+		addSet("activity_type", *req.ActivityType)
+	}
+	if req.ExcelBidStatus != nil {
+		addSet("excel_bid_status", *req.ExcelBidStatus)
+	}
+	if req.SubmissionStatus != nil {
+		addSet("submission_status", *req.SubmissionStatus)
+	}
+	if req.FinancialEvaluationStatus != nil {
+		addSet("financial_evaluation_status", *req.FinancialEvaluationStatus)
+	}
+	if req.POReceivedStatus != nil {
+		addSet("po_received_status", *req.POReceivedStatus)
+	}
+	if req.TargetMonthDate != nil {
+		t, err := time.Parse(time.RFC3339, *req.TargetMonthDate)
+		if err == nil {
+			addSet("target_month_date", t)
+		}
 	}
 
 	args = append(args, id)
@@ -467,6 +507,8 @@ func scanBidFields(s scannable) (*domain.BidWorkspace, error) {
 		&b.Remarks, &b.CompetitorInfo, &b.Metadata,
 		&b.AISourceDocumentID, &b.AIExtractionConfidence,
 		&b.CreatedAt, &b.UpdatedAt, &b.ArchivedAt,
+		&b.Team, &b.ScopeType, &b.BGRate, &b.ActivityType, &b.TargetMonthDate,
+		&b.ExcelBidStatus, &b.SubmissionStatus, &b.FinancialEvaluationStatus, &b.POReceivedStatus,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan bid: %w", err)

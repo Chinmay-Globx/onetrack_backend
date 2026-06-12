@@ -104,6 +104,17 @@ type BidWorkspace struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+
+	// Excel bulk upload fields
+	Team                      *string    `json:"team,omitempty"`
+	ScopeType                 *string    `json:"scope_type,omitempty"`
+	BGRate                    *float64   `json:"bg_rate,omitempty"`
+	ActivityType              *string    `json:"activity_type,omitempty"`
+	TargetMonthDate           *time.Time `json:"target_month_date,omitempty"`
+	ExcelBidStatus            *string    `json:"excel_bid_status,omitempty"`
+	SubmissionStatus          *string    `json:"submission_status,omitempty"`
+	FinancialEvaluationStatus *string    `json:"financial_evaluation_status,omitempty"`
+	POReceivedStatus          *string    `json:"po_received_status,omitempty"`
 }
 
 type BidWorkspaceMember struct {
@@ -151,6 +162,15 @@ type CreateBidRequest struct {
 	BidOwnerID       string   `json:"bid_owner_id" binding:"required"`
 	Remarks          *string  `json:"remarks"`
 	Metadata         *string  `json:"metadata"` // raw JSON string
+	Team                      *string  `json:"team,omitempty"`
+	ScopeType                 *string  `json:"scope_type,omitempty"`
+	BGRate                    *float64 `json:"bg_rate,omitempty"`
+	ActivityType              *string  `json:"activity_type,omitempty"`
+	TargetMonthDate           *string  `json:"target_month_date,omitempty"`
+	ExcelBidStatus            *string  `json:"excel_bid_status,omitempty"`
+	SubmissionStatus          *string  `json:"submission_status,omitempty"`
+	FinancialEvaluationStatus *string  `json:"financial_evaluation_status,omitempty"`
+	POReceivedStatus          *string  `json:"po_received_status,omitempty"`
 }
 
 type UpdateBidRequest struct {
@@ -175,6 +195,15 @@ type UpdateBidRequest struct {
 	ResultDate       *string  `json:"result_date"`
 	RADate           *string  `json:"ra_date"`
 	Remarks          *string  `json:"remarks"`
+	Team                      *string  `json:"team,omitempty"`
+	ScopeType                 *string  `json:"scope_type,omitempty"`
+	BGRate                    *float64 `json:"bg_rate,omitempty"`
+	ActivityType              *string  `json:"activity_type,omitempty"`
+	TargetMonthDate           *string  `json:"target_month_date,omitempty"`
+	ExcelBidStatus            *string  `json:"excel_bid_status,omitempty"`
+	SubmissionStatus          *string  `json:"submission_status,omitempty"`
+	FinancialEvaluationStatus *string  `json:"financial_evaluation_status,omitempty"`
+	POReceivedStatus          *string  `json:"po_received_status,omitempty"`
 }
 
 type TransitionStageRequest struct {
@@ -294,9 +323,19 @@ type BidListItem struct {
 	EMDType          *string     `json:"emd_type"`
 	OpeningDate      *time.Time  `json:"opening_date"`
 	ClosingDate      *time.Time  `json:"closing_date"`
-	OEMRequired      bool        `json:"oem_required"`
-	BidOwner         UserSummary `json:"bid_owner"`
-	CreatedAt        time.Time   `json:"created_at"`
+	OEMRequired               bool        `json:"oem_required"`
+	BidOwner                  UserSummary `json:"bid_owner"`
+	Remarks                   *string     `json:"remarks"`
+	Team                      *string     `json:"team,omitempty"`
+	ScopeType                 *string     `json:"scope_type,omitempty"`
+	BGRate                    *float64    `json:"bg_rate,omitempty"`
+	ActivityType              *string     `json:"activity_type,omitempty"`
+	TargetMonthDate           *time.Time  `json:"target_month_date,omitempty"`
+	ExcelBidStatus            *string     `json:"excel_bid_status,omitempty"`
+	SubmissionStatus          *string     `json:"submission_status,omitempty"`
+	FinancialEvaluationStatus *string     `json:"financial_evaluation_status,omitempty"`
+	POReceivedStatus          *string     `json:"po_received_status,omitempty"`
+	CreatedAt                 time.Time   `json:"created_at"`
 }
 
 type BidListResponse struct {
@@ -312,28 +351,37 @@ type BidListResponse struct {
 // ────────────────────────────────────────
 
 type CreateBidParams struct {
-	BidNo            *string
-	GemBidNo         *string
-	Title            string
-	OrganizationName *string
-	DepartmentName   *string
-	PortalSource     string
-	CreationMode     string
-	BidOwnerID       string
-	CreatedBy        string
-	EstimatedValue   *float64
-	EMDAmount        *float64
-	EMDType          *string
-	EMDExempted      bool
-	OEMRequired      bool
-	HasTechEval      bool
-	OpeningDate      *time.Time
-	ClosingDate      *time.Time
-	Category         *string
-	BidType          *string
-	GemBidType       *string
-	Remarks          *string
-	Metadata         []byte
+	BidNo                     *string
+	GemBidNo                  *string
+	Title                     string
+	OrganizationName          *string
+	DepartmentName            *string
+	PortalSource              string
+	CreationMode              string
+	BidOwnerID                string
+	CreatedBy                 string
+	EstimatedValue            *float64
+	EMDAmount                 *float64
+	EMDType                   *string
+	EMDExempted               bool
+	OEMRequired               bool
+	HasTechEval               bool
+	OpeningDate               *time.Time
+	ClosingDate               *time.Time
+	Category                  *string
+	BidType                   *string
+	GemBidType                *string
+	Remarks                   *string
+	Metadata                  []byte
+	Team                      *string
+	ScopeType                 *string
+	BGRate                    *float64
+	ActivityType              *string
+	TargetMonthDate           *time.Time
+	ExcelBidStatus            *string
+	SubmissionStatus          *string
+	FinancialEvaluationStatus *string
+	POReceivedStatus          *string
 	// AI-mode fields (nil for MANUAL)
 	AISourceDocumentID     *string
 	AIExtractionConfidence *float64

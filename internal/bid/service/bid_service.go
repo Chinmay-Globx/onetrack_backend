@@ -69,6 +69,23 @@ func (s *bidService) CreateBid(ctx context.Context, req *domain.CreateBidRequest
 		params.Metadata = []byte(*req.Metadata)
 	}
 
+	params.Team = req.Team
+	params.ScopeType = req.ScopeType
+	params.BGRate = req.BGRate
+	params.ActivityType = req.ActivityType
+	params.ExcelBidStatus = req.ExcelBidStatus
+	params.SubmissionStatus = req.SubmissionStatus
+	params.FinancialEvaluationStatus = req.FinancialEvaluationStatus
+	params.POReceivedStatus = req.POReceivedStatus
+
+	if req.TargetMonthDate != nil {
+		t, err := time.Parse(time.RFC3339, *req.TargetMonthDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid target_month_date format: %w", err)
+		}
+		params.TargetMonthDate = &t
+	}
+
 	id, err := s.repo.Create(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create bid: %w", err)
@@ -323,8 +340,18 @@ func buildBidListItem(bid *domain.BidWorkspace, owner *domain.UserSummary) domai
 		EMDType:          bid.EMDType,
 		OpeningDate:      bid.OpeningDate,
 		ClosingDate:      bid.ClosingDate,
-		OEMRequired:      bid.OEMRequired,
-		BidOwner:         *owner,
-		CreatedAt:        bid.CreatedAt,
+		OEMRequired:               bid.OEMRequired,
+		BidOwner:                  *owner,
+		Remarks:                   bid.Remarks,
+		Team:                      bid.Team,
+		ScopeType:                 bid.ScopeType,
+		BGRate:                    bid.BGRate,
+		ActivityType:              bid.ActivityType,
+		TargetMonthDate:           bid.TargetMonthDate,
+		ExcelBidStatus:            bid.ExcelBidStatus,
+		SubmissionStatus:          bid.SubmissionStatus,
+		FinancialEvaluationStatus: bid.FinancialEvaluationStatus,
+		POReceivedStatus:          bid.POReceivedStatus,
+		CreatedAt:                 bid.CreatedAt,
 	}
 }
