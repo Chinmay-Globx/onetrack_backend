@@ -281,12 +281,18 @@ type BidListItem struct {
 	GemBidNo         *string     `json:"gem_bid_no"`
 	Title            string      `json:"title"`
 	OrganizationName *string     `json:"organization_name"`
+	DepartmentName   *string     `json:"department_name"`
+	PortalSource     string      `json:"portal_source"`
 	Category         *string     `json:"category"`
+	BidType          *string     `json:"bid_type"`
 	CreationMode     string      `json:"creation_mode"`
 	WorkflowStage    string      `json:"workflow_stage"`
 	BidStatus        string      `json:"bid_status"`
 	BidOutcome       *string     `json:"bid_outcome"`
 	EstimatedValue   *float64    `json:"estimated_value"`
+	EMDAmount        *float64    `json:"emd_amount"`
+	EMDType          *string     `json:"emd_type"`
+	OpeningDate      *time.Time  `json:"opening_date"`
 	ClosingDate      *time.Time  `json:"closing_date"`
 	OEMRequired      bool        `json:"oem_required"`
 	BidOwner         UserSummary `json:"bid_owner"`
