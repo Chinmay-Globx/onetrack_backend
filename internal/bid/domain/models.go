@@ -115,6 +115,7 @@ type BidWorkspace struct {
 	SubmissionStatus          *string    `json:"submission_status,omitempty"`
 	FinancialEvaluationStatus *string    `json:"financial_evaluation_status,omitempty"`
 	POReceivedStatus          *string    `json:"po_received_status,omitempty"`
+	BidResult                 *string    `json:"bid_result,omitempty"`
 }
 
 type BidWorkspaceMember struct {
@@ -171,6 +172,7 @@ type CreateBidRequest struct {
 	SubmissionStatus          *string  `json:"submission_status,omitempty"`
 	FinancialEvaluationStatus *string  `json:"financial_evaluation_status,omitempty"`
 	POReceivedStatus          *string  `json:"po_received_status,omitempty"`
+	BidResult                 *string  `json:"bid_result,omitempty"`
 }
 
 type UpdateBidRequest struct {
@@ -204,6 +206,9 @@ type UpdateBidRequest struct {
 	SubmissionStatus          *string  `json:"submission_status,omitempty"`
 	FinancialEvaluationStatus *string  `json:"financial_evaluation_status,omitempty"`
 	POReceivedStatus          *string  `json:"po_received_status,omitempty"`
+	BidResult                 *string  `json:"bid_result,omitempty"`
+	BidStatus                 *string  `json:"bid_status,omitempty"`
+	BidOutcome                *string  `json:"bid_outcome,omitempty"`
 }
 
 type TransitionStageRequest struct {
@@ -299,6 +304,16 @@ type BidResponse struct {
 	CreatedBy              string           `json:"created_by"`
 	AISourceDocumentID     *string          `json:"ai_source_document_id,omitempty"`
 	AIExtractionConfidence *float64         `json:"ai_extraction_confidence,omitempty"`
+	Team                      *string          `json:"team,omitempty"`
+	ScopeType                 *string          `json:"scope_type,omitempty"`
+	BGRate                    *float64         `json:"bg_rate,omitempty"`
+	ActivityType              *string          `json:"activity_type,omitempty"`
+	TargetMonthDate           *time.Time       `json:"target_month_date,omitempty"`
+	ExcelBidStatus            *string          `json:"excel_bid_status,omitempty"`
+	SubmissionStatus          *string          `json:"submission_status,omitempty"`
+	FinancialEvaluationStatus *string          `json:"financial_evaluation_status,omitempty"`
+	POReceivedStatus          *string          `json:"po_received_status,omitempty"`
+	BidResult                 *string          `json:"bid_result,omitempty"`
 	CreatedAt              time.Time        `json:"created_at"`
 	UpdatedAt              time.Time        `json:"updated_at"`
 	ArchivedAt             *time.Time       `json:"archived_at"`
@@ -335,15 +350,21 @@ type BidListItem struct {
 	SubmissionStatus          *string     `json:"submission_status,omitempty"`
 	FinancialEvaluationStatus *string     `json:"financial_evaluation_status,omitempty"`
 	POReceivedStatus          *string     `json:"po_received_status,omitempty"`
+	EMDExempted               bool        `json:"emd_exempted"`
+	HasTechEval               bool        `json:"has_tech_eval"`
+	BidResult                 *string     `json:"bid_result,omitempty"`
 	CreatedAt                 time.Time   `json:"created_at"`
 }
 
 type BidListResponse struct {
-	Bids       []BidListItem `json:"bids"`
-	Total      int           `json:"total"`
-	Page       int           `json:"page"`
-	Limit      int           `json:"limit"`
-	TotalPages int           `json:"total_pages"`
+	Bids        []BidListItem `json:"bids"`
+	Total       int           `json:"total"`
+	Page        int           `json:"page"`
+	Limit       int           `json:"limit"`
+	TotalPages  int           `json:"total_pages"`
+	ActiveCount int           `json:"active_count"`
+	WonCount    int           `json:"won_count"`
+	LostCount   int           `json:"lost_count"`
 }
 
 // ────────────────────────────────────────
@@ -382,6 +403,7 @@ type CreateBidParams struct {
 	SubmissionStatus          *string
 	FinancialEvaluationStatus *string
 	POReceivedStatus          *string
+	BidResult                 *string
 	// AI-mode fields (nil for MANUAL)
 	AISourceDocumentID     *string
 	AIExtractionConfidence *float64

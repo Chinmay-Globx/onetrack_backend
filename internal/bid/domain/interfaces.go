@@ -5,7 +5,7 @@ import "context"
 type BidRepository interface {
 	Create(ctx context.Context, params *CreateBidParams) (string, error)
 	GetByID(ctx context.Context, id string) (*BidWorkspace, error)
-	List(ctx context.Context, params ListBidsParams) ([]BidWorkspace, int, error)
+	List(ctx context.Context, params ListBidsParams) ([]BidWorkspace, int, map[string]int, error)
 	Update(ctx context.Context, id string, req *UpdateBidRequest) error
 	UpdateStage(ctx context.Context, id string, stage string, status string) error
 	UpdateOutcome(ctx context.Context, id string, req *RecordOutcomeRequest) error
