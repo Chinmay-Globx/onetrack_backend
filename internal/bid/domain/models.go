@@ -59,8 +59,9 @@ type BidWorkspace struct {
 	CreationMode     string  `json:"creation_mode"`
 	WorkflowStage    string  `json:"workflow_stage"`
 	BidStatus        string  `json:"bid_status"`
-	BidOwnerID       string  `json:"bid_owner_id"`
-	CreatedBy        string  `json:"created_by"`
+	BidOwnerID          string  `json:"bid_owner_id"`
+	TechnicalManagerID  *string `json:"technical_manager_id,omitempty"`
+	CreatedBy           string  `json:"created_by"`
 
 	// Financial
 	EstimatedValue *float64 `json:"estimated_value,omitempty"`
@@ -118,6 +119,27 @@ type BidWorkspace struct {
 	BidResult                 *string    `json:"bid_result,omitempty"`
 }
 
+type BidChecklist struct {
+	ID        string     `json:"id"`
+	BidID     string     `json:"bid_id"`
+	Title     string     `json:"title"`
+	IsDone    bool       `json:"is_done"`
+	DoneBy    *string    `json:"done_by,omitempty"`
+	DoneAt    *time.Time `json:"done_at,omitempty"`
+	SortOrder int        `json:"sort_order"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type BidChecklistItem struct {
+	ID        string      `json:"id"`
+	Title     string      `json:"title"`
+	IsDone    bool        `json:"is_done"`
+	DoneBy    *UserSummary `json:"done_by,omitempty"`
+	DoneAt    *time.Time  `json:"done_at,omitempty"`
+	SortOrder int         `json:"sort_order"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
 type BidWorkspaceMember struct {
 	ID      string    `json:"id"`
 	BidID   string    `json:"bid_id"`
@@ -160,9 +182,11 @@ type CreateBidRequest struct {
 	HasTechEval      *bool    `json:"has_tech_eval"`
 	OpeningDate      *string  `json:"opening_date"`
 	ClosingDate      *string  `json:"closing_date"`
-	BidOwnerID       string   `json:"bid_owner_id" binding:"required"`
-	Remarks          *string  `json:"remarks"`
-	Metadata         *string  `json:"metadata"` // raw JSON string
+	BidOwnerID          string   `json:"bid_owner_id" binding:"required"`
+	TechnicalManagerID  *string  `json:"technical_manager_id"`
+	Remarks             *string  `json:"remarks"`
+	Metadata            *string  `json:"metadata"` // raw JSON string
+	Checklists          []string `json:"checklists"` // checklist titles to seed on creation
 	Team                      *string  `json:"team,omitempty"`
 	ScopeType                 *string  `json:"scope_type,omitempty"`
 	BGRate                    *float64 `json:"bg_rate,omitempty"`
@@ -196,7 +220,10 @@ type UpdateBidRequest struct {
 	SubmissionDate   *string  `json:"submission_date"`
 	ResultDate       *string  `json:"result_date"`
 	RADate           *string  `json:"ra_date"`
-	Remarks          *string  `json:"remarks"`
+	TechnicalManagerID        *string  `json:"technical_manager_id"`
+	Remarks                   *string  `json:"remarks"`
+	TechComplianceStatus      *string  `json:"tech_compliance_status"`
+	QualificationStatus       *string  `json:"qualification_status"`
 	Team                      *string  `json:"team,omitempty"`
 	ScopeType                 *string  `json:"scope_type,omitempty"`
 	BGRate                    *float64 `json:"bg_rate,omitempty"`
@@ -299,9 +326,11 @@ type BidResponse struct {
 	Remarks                *string          `json:"remarks"`
 	CompetitorInfo         interface{}      `json:"competitor_info"`
 	Metadata               interface{}      `json:"metadata"`
-	BidOwner               UserSummary      `json:"bid_owner"`
-	Members                []MemberResponse `json:"members"`
-	CreatedBy              string           `json:"created_by"`
+	BidOwner               UserSummary        `json:"bid_owner"`
+	TechnicalManager       *UserSummary       `json:"technical_manager,omitempty"`
+	Members                []MemberResponse   `json:"members"`
+	Checklists             []BidChecklistItem `json:"checklists"`
+	CreatedBy              string             `json:"created_by"`
 	AISourceDocumentID     *string          `json:"ai_source_document_id,omitempty"`
 	AIExtractionConfidence *float64         `json:"ai_extraction_confidence,omitempty"`
 	Team                      *string          `json:"team,omitempty"`
@@ -338,8 +367,9 @@ type BidListItem struct {
 	EMDType          *string     `json:"emd_type"`
 	OpeningDate      *time.Time  `json:"opening_date"`
 	ClosingDate      *time.Time  `json:"closing_date"`
-	OEMRequired               bool        `json:"oem_required"`
-	BidOwner                  UserSummary `json:"bid_owner"`
+	OEMRequired               bool         `json:"oem_required"`
+	BidOwner                  UserSummary  `json:"bid_owner"`
+	TechnicalManager          *UserSummary `json:"technical_manager,omitempty"`
 	Remarks                   *string     `json:"remarks"`
 	Team                      *string     `json:"team,omitempty"`
 	ScopeType                 *string     `json:"scope_type,omitempty"`
@@ -380,6 +410,7 @@ type CreateBidParams struct {
 	PortalSource              string
 	CreationMode              string
 	BidOwnerID                string
+	TechnicalManagerID        *string
 	CreatedBy                 string
 	EstimatedValue            *float64
 	EMDAmount                 *float64

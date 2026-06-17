@@ -20,23 +20,24 @@ func NewBidService(repo domain.BidRepository) domain.BidService {
 
 func (s *bidService) CreateBid(ctx context.Context, req *domain.CreateBidRequest, createdBy string) (*domain.BidResponse, error) {
 	params := &domain.CreateBidParams{
-		BidNo:            req.BidNo,
-		GemBidNo:         req.GemBidNo,
-		Title:            req.Title,
-		OrganizationName: req.OrganizationName,
-		DepartmentName:   req.DepartmentName,
-		PortalSource:     "GeM",
-		CreationMode:     req.CreationMode,
-		BidOwnerID:       req.BidOwnerID,
-		CreatedBy:        createdBy,
-		EstimatedValue:   req.EstimatedValue,
-		EMDAmount:        req.EMDAmount,
-		EMDType:          req.EMDType,
-		Category:         req.Category,
-		BidType:          req.BidType,
-		GemBidType:       req.GemBidType,
-		Remarks:          req.Remarks,
-		Metadata:         []byte("{}"),
+		BidNo:              req.BidNo,
+		GemBidNo:           req.GemBidNo,
+		Title:              req.Title,
+		OrganizationName:   req.OrganizationName,
+		DepartmentName:     req.DepartmentName,
+		PortalSource:       "GeM",
+		CreationMode:       req.CreationMode,
+		BidOwnerID:         req.BidOwnerID,
+		TechnicalManagerID: req.TechnicalManagerID,
+		CreatedBy:          createdBy,
+		EstimatedValue:     req.EstimatedValue,
+		EMDAmount:          req.EMDAmount,
+		EMDType:            req.EMDType,
+		Category:           req.Category,
+		BidType:            req.BidType,
+		GemBidType:         req.GemBidType,
+		Remarks:            req.Remarks,
+		Metadata:           []byte("{}"),
 	}
 
 	if req.PortalSource != nil {
@@ -99,6 +100,11 @@ func (s *bidService) CreateBid(ctx context.Context, req *domain.CreateBidRequest
 		TransitionedBy: createdBy,
 	})
 
+	// Seed checklists if provided
+	if len(req.Checklists) > 0 {
+		_ = s.repo.BulkInsertChecklists(ctx, id, req.Checklists)
+	}
+
 	return s.GetBid(ctx, id)
 }
 
@@ -113,12 +119,96 @@ func (s *bidService) GetBid(ctx context.Context, id string) (*domain.BidResponse
 		owner = &domain.UserSummary{ID: bid.BidOwnerID}
 	}
 
+	var techManager *domain.UserSummary
+	if bid.TechnicalManagerID != nil {
+		tm, err := s.repo.GetUserSummary(ctx, *bid.TechnicalManagerID)
+		if err == nil {
+			techManager = tm
+		}
+	}
+
 	members, err := s.repo.GetMembers(ctx, id)
 	if err != nil {
 		members = []domain.MemberResponse{}
 	}
 
-	return buildBidResponse(bid, owner, members), nil
+	checklists, err := s.repo.GetChecklists(ctx, id)
+	if err != nil {
+		checklists = []domain.BidChecklist{}
+	}
+
+	checklistItems := make([]domain.BidChecklistItem, 0, len(checklists))
+	for _, c := range checklists {
+		item := domain.BidChecklistItem{
+			ID:        c.ID,
+			Title:     c.Title,
+			IsDone:    c.IsDone,
+			DoneAt:    c.DoneAt,
+			SortOrder: c.SortOrder,
+			CreatedAt: c.CreatedAt,
+		}
+		if c.DoneBy != nil {
+			u, err := s.repo.GetUserSummary(ctx, *c.DoneBy)
+			if err == nil {
+				item.DoneBy = u
+			}
+		}
+		checklistItems = append(checklistItems, item)
+	}
+
+	return buildBidResponse(bid, owner, techManager, members, checklistItems), nil
+}
+
+func (s *bidService) GetChecklists(ctx context.Context, bidID string) ([]domain.BidChecklistItem, error) {
+	checklists, err := s.repo.GetChecklists(ctx, bidID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.BidChecklistItem, 0, len(checklists))
+	for _, c := range checklists {
+		item := domain.BidChecklistItem{
+			ID:        c.ID,
+			Title:     c.Title,
+			IsDone:    c.IsDone,
+			DoneAt:    c.DoneAt,
+			SortOrder: c.SortOrder,
+			CreatedAt: c.CreatedAt,
+		}
+		if c.DoneBy != nil {
+			u, _ := s.repo.GetUserSummary(ctx, *c.DoneBy)
+			item.DoneBy = u
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func (s *bidService) ToggleChecklist(ctx context.Context, bidID string, checklistID string, isDone bool, actorID string) (*domain.BidChecklistItem, error) {
+	if err := s.repo.ToggleChecklist(ctx, checklistID, isDone, actorID); err != nil {
+		return nil, err
+	}
+	checklists, err := s.repo.GetChecklists(ctx, bidID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range checklists {
+		if c.ID == checklistID {
+			item := &domain.BidChecklistItem{
+				ID:        c.ID,
+				Title:     c.Title,
+				IsDone:    c.IsDone,
+				DoneAt:    c.DoneAt,
+				SortOrder: c.SortOrder,
+				CreatedAt: c.CreatedAt,
+			}
+			if c.DoneBy != nil {
+				u, _ := s.repo.GetUserSummary(ctx, *c.DoneBy)
+				item.DoneBy = u
+			}
+			return item, nil
+		}
+	}
+	return nil, fmt.Errorf("checklist item not found")
 }
 
 func (s *bidService) ListBids(ctx context.Context, params domain.ListBidsParams) (*domain.BidListResponse, error) {
@@ -267,7 +357,7 @@ func (s *bidService) ArchiveBid(ctx context.Context, id string) error {
 // Response builders
 // ────────────────────────────────────────
 
-func buildBidResponse(bid *domain.BidWorkspace, owner *domain.UserSummary, members []domain.MemberResponse) *domain.BidResponse {
+func buildBidResponse(bid *domain.BidWorkspace, owner *domain.UserSummary, techManager *domain.UserSummary, members []domain.MemberResponse, checklists []domain.BidChecklistItem) *domain.BidResponse {
 	var competitorInfo interface{} = []interface{}{}
 	var metadata interface{} = map[string]interface{}{}
 
@@ -314,7 +404,9 @@ func buildBidResponse(bid *domain.BidWorkspace, owner *domain.UserSummary, membe
 		CompetitorInfo:   competitorInfo,
 		Metadata:         metadata,
 		BidOwner:         *owner,
+		TechnicalManager: techManager,
 		Members:          members,
+		Checklists:       checklists,
 		CreatedBy:        bid.CreatedBy,
 		AISourceDocumentID:     bid.AISourceDocumentID,
 		AIExtractionConfidence: bid.AIExtractionConfidence,

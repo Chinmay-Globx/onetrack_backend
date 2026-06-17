@@ -25,7 +25,7 @@ func (r *postgresBidRepo) Create(ctx context.Context, bid *domain.CreateBidParam
 		INSERT INTO bid.bid_workspaces (
 			bid_no, gem_bid_no, title, organization_name, department_name,
 			portal_source, creation_mode, workflow_stage, bid_status,
-			bid_owner_id, created_by,
+			bid_owner_id, technical_manager_id, created_by,
 			estimated_value, emd_amount, emd_type, emd_exempted,
 			oem_required, has_tech_eval,
 			opening_date, closing_date,
@@ -37,21 +37,21 @@ func (r *postgresBidRepo) Create(ctx context.Context, bid *domain.CreateBidParam
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
-			$10, $11,
-			$12, $13, $14, $15,
-			$16, $17,
-			$18, $19,
-			$20, $21, $22,
-			$23, $24,
-			$25, $26, $27, $28, $29,
-			$30, $31, $32, $33, $34
+			$10, $11, $12,
+			$13, $14, $15, $16,
+			$17, $18,
+			$19, $20,
+			$21, $22, $23,
+			$24, $25,
+			$26, $27, $28, $29, $30,
+			$31, $32, $33, $34, $35
 		) RETURNING id
 	`
 	var id string
 	err := r.pool.QueryRow(ctx, query,
 		bid.BidNo, bid.GemBidNo, bid.Title, bid.OrganizationName, bid.DepartmentName,
 		bid.PortalSource, bid.CreationMode, domain.StageDiscovered, domain.BidStatusActive,
-		bid.BidOwnerID, bid.CreatedBy,
+		bid.BidOwnerID, bid.TechnicalManagerID, bid.CreatedBy,
 		bid.EstimatedValue, bid.EMDAmount, bid.EMDType, bid.EMDExempted,
 		bid.OEMRequired, bid.HasTechEval,
 		bid.OpeningDate, bid.ClosingDate,
@@ -71,7 +71,7 @@ func (r *postgresBidRepo) GetByID(ctx context.Context, id string) (*domain.BidWo
 	query := `
 		SELECT id, bid_no, gem_bid_no, title, organization_name, department_name,
 		       portal_source, creation_mode, workflow_stage, bid_status,
-		       bid_owner_id, created_by,
+		       bid_owner_id, technical_manager_id, created_by,
 		       estimated_value, emd_amount, emd_type, emd_exempted,
 		       final_bid_value, l1_price, quoted_price,
 		       opening_date, closing_date, submission_date, result_date, ra_date,
@@ -344,6 +344,15 @@ func (r *postgresBidRepo) Update(ctx context.Context, id string, req *domain.Upd
 	if req.BidOutcome != nil {
 		addSet("bid_outcome", *req.BidOutcome)
 	}
+	if req.TechnicalManagerID != nil {
+		addSet("technical_manager_id", *req.TechnicalManagerID)
+	}
+	if req.TechComplianceStatus != nil {
+		addSet("tech_compliance_status", *req.TechComplianceStatus)
+	}
+	if req.QualificationStatus != nil {
+		addSet("qualification_status", *req.QualificationStatus)
+	}
 	if req.TargetMonthDate != nil {
 		t, err := time.Parse(time.RFC3339, *req.TargetMonthDate)
 		if err == nil {
@@ -497,6 +506,63 @@ func (r *postgresBidRepo) GetStageHistory(ctx context.Context, bidID string) ([]
 	return history, nil
 }
 
+func (r *postgresBidRepo) BulkInsertChecklists(ctx context.Context, bidID string, titles []string) error {
+	if len(titles) == 0 {
+		return nil
+	}
+	for i, title := range titles {
+		_, err := r.pool.Exec(ctx,
+			`INSERT INTO bid.bid_checklists (bid_id, title, sort_order) VALUES ($1, $2, $3)`,
+			bidID, title, i,
+		)
+		if err != nil {
+			return fmt.Errorf("insert checklist %q: %w", title, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresBidRepo) GetChecklists(ctx context.Context, bidID string) ([]domain.BidChecklist, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, bid_id, title, is_done, done_by, done_at, sort_order, created_at
+		 FROM bid.bid_checklists WHERE bid_id = $1 ORDER BY sort_order ASC, created_at ASC`,
+		bidID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []domain.BidChecklist
+	for rows.Next() {
+		var c domain.BidChecklist
+		if err := rows.Scan(&c.ID, &c.BidID, &c.Title, &c.IsDone, &c.DoneBy, &c.DoneAt, &c.SortOrder, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, c)
+	}
+	if items == nil {
+		items = []domain.BidChecklist{}
+	}
+	return items, nil
+}
+
+func (r *postgresBidRepo) ToggleChecklist(ctx context.Context, checklistID string, isDone bool, doneBy string) error {
+	var err error
+	if isDone {
+		_, err = r.pool.Exec(ctx,
+			`UPDATE bid.bid_checklists SET is_done = true, done_by = $1, done_at = NOW() WHERE id = $2`,
+			doneBy, checklistID,
+		)
+	} else {
+		_, err = r.pool.Exec(ctx,
+			`UPDATE bid.bid_checklists SET is_done = false, done_by = NULL, done_at = NULL WHERE id = $1`,
+			checklistID,
+		)
+	}
+	return err
+}
+
 func (r *postgresBidRepo) GetUserSummary(ctx context.Context, userID string) (*domain.UserSummary, error) {
 	var u domain.UserSummary
 	err := r.pool.QueryRow(ctx,
@@ -532,7 +598,7 @@ func scanBidFields(s scannable) (*domain.BidWorkspace, error) {
 	err := s.Scan(
 		&b.ID, &b.BidNo, &b.GemBidNo, &b.Title, &b.OrganizationName, &b.DepartmentName,
 		&b.PortalSource, &b.CreationMode, &b.WorkflowStage, &b.BidStatus,
-		&b.BidOwnerID, &b.CreatedBy,
+		&b.BidOwnerID, &b.TechnicalManagerID, &b.CreatedBy,
 		&b.EstimatedValue, &b.EMDAmount, &b.EMDType, &b.EMDExempted,
 		&b.FinalBidValue, &b.L1Price, &b.QuotedPrice,
 		&b.OpeningDate, &b.ClosingDate, &b.SubmissionDate, &b.ResultDate, &b.RADate,

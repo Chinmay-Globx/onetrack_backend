@@ -25,5 +25,9 @@ func RegisterBidRoutes(router *gin.RouterGroup, handler *BidHandler, authMiddlew
 
 		// Outcome
 		bids.PATCH("/:id/outcome", authMiddleware.RequirePermission("bid.edit"), handler.RecordOutcome)
+
+		// Checklists
+		bids.GET("/:id/checklists", authMiddleware.RequirePermission("bid.view"), handler.GetChecklists)
+		bids.PATCH("/:id/checklists/:cid", authMiddleware.RequirePermission("bid.edit"), handler.ToggleChecklist)
 	}
 }

@@ -22,6 +22,11 @@ type BidRepository interface {
 
 	// User lookup for response enrichment
 	GetUserSummary(ctx context.Context, userID string) (*UserSummary, error)
+
+	// Bid-scoped checklists
+	BulkInsertChecklists(ctx context.Context, bidID string, titles []string) error
+	GetChecklists(ctx context.Context, bidID string) ([]BidChecklist, error)
+	ToggleChecklist(ctx context.Context, checklistID string, isDone bool, doneBy string) error
 }
 
 type BidService interface {
@@ -35,6 +40,10 @@ type BidService interface {
 	RemoveMember(ctx context.Context, bidID string, userID string) error
 	RecordOutcome(ctx context.Context, id string, req *RecordOutcomeRequest) error
 	ArchiveBid(ctx context.Context, id string) error
+
+	// Bid-scoped checklists
+	GetChecklists(ctx context.Context, bidID string) ([]BidChecklistItem, error)
+	ToggleChecklist(ctx context.Context, bidID string, checklistID string, isDone bool, actorID string) (*BidChecklistItem, error)
 }
 
 type TransitionResult struct {

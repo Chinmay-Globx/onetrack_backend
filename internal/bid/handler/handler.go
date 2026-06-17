@@ -185,6 +185,37 @@ func (h *BidHandler) ArchiveBid(c *gin.Context) {
 	response.Success(c, http.StatusOK, "Bid archived successfully", nil)
 }
 
+func (h *BidHandler) GetChecklists(c *gin.Context) {
+	bidID := c.Param("id")
+	items, err := h.svc.GetChecklists(c.Request.Context(), bidID)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Checklists retrieved", items)
+}
+
+func (h *BidHandler) ToggleChecklist(c *gin.Context) {
+	bidID := c.Param("id")
+	checklistID := c.Param("cid")
+
+	var req struct {
+		IsDone bool `json:"is_done"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+
+	actorID := c.GetString("user_id")
+	item, err := h.svc.ToggleChecklist(c.Request.Context(), bidID, checklistID, req.IsDone, actorID)
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Checklist updated", item)
+}
+
 func parseIntQuery(c *gin.Context, key string, def int) int {
 	v := c.Query(key)
 	if v == "" {
