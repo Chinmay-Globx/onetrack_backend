@@ -184,7 +184,7 @@ func (r *postgresBidRepo) List(ctx context.Context, params domain.ListBidsParams
 	dataQuery := fmt.Sprintf(`
 		SELECT b.id, b.bid_no, b.gem_bid_no, b.title, b.organization_name, b.department_name,
 		       b.portal_source, b.creation_mode, b.workflow_stage, b.bid_status,
-		       b.bid_owner_id, b.created_by,
+		       b.bid_owner_id, b.technical_manager_id, b.created_by,
 		       b.estimated_value, b.emd_amount, b.emd_type, b.emd_exempted,
 		       b.final_bid_value, b.l1_price, b.quoted_price,
 		       b.opening_date, b.closing_date, b.submission_date, b.result_date, b.ra_date,
