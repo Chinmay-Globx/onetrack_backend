@@ -191,6 +191,68 @@ func (s *bidService) GetChecklists(ctx context.Context, bidID string) ([]domain.
 	return items, nil
 }
 
+func (s *bidService) AddChecklist(ctx context.Context, bidID string, req *domain.AddChecklistRequest) (*domain.BidChecklistItem, error) {
+	sortOrder := 0
+	if req.SortOrder != nil {
+		sortOrder = *req.SortOrder
+	} else {
+		existing, err := s.repo.GetChecklists(ctx, bidID)
+		if err == nil {
+			sortOrder = len(existing)
+		}
+	}
+	c, err := s.repo.AddChecklist(ctx, bidID, req.Title, sortOrder)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.BidChecklistItem{
+		ID:        c.ID,
+		Title:     c.Title,
+		IsDone:    c.IsDone,
+		SortOrder: c.SortOrder,
+		CreatedAt: c.CreatedAt,
+	}, nil
+}
+
+func (s *bidService) UpdateChecklist(ctx context.Context, bidID string, checklistID string, req *domain.UpdateChecklistRequest) (*domain.BidChecklistItem, error) {
+	if err := s.repo.UpdateChecklist(ctx, checklistID, req.Title, req.SortOrder); err != nil {
+		return nil, err
+	}
+	checklists, err := s.repo.GetChecklists(ctx, bidID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range checklists {
+		if c.ID == checklistID {
+			item := &domain.BidChecklistItem{
+				ID:        c.ID,
+				Title:     c.Title,
+				IsDone:    c.IsDone,
+				DoneAt:    c.DoneAt,
+				SortOrder: c.SortOrder,
+				CreatedAt: c.CreatedAt,
+			}
+			if c.DoneBy != nil {
+				u, _ := s.repo.GetUserSummary(ctx, *c.DoneBy)
+				item.DoneBy = u
+			}
+			return item, nil
+		}
+	}
+	return nil, fmt.Errorf("checklist item not found")
+}
+
+func (s *bidService) DeleteChecklist(ctx context.Context, bidID string, checklistID string) error {
+	return s.repo.DeleteChecklist(ctx, checklistID)
+}
+
+func (s *bidService) ReorderChecklists(ctx context.Context, bidID string, req *domain.ReorderChecklistRequest) ([]domain.BidChecklistItem, error) {
+	if err := s.repo.ReorderChecklists(ctx, req.Items); err != nil {
+		return nil, err
+	}
+	return s.GetChecklists(ctx, bidID)
+}
+
 func (s *bidService) ToggleChecklist(ctx context.Context, bidID string, checklistID string, isDone bool, actorID string) (*domain.BidChecklistItem, error) {
 	if err := s.repo.ToggleChecklist(ctx, checklistID, isDone, actorID); err != nil {
 		return nil, err

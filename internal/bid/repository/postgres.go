@@ -547,6 +547,67 @@ func (r *postgresBidRepo) GetChecklists(ctx context.Context, bidID string) ([]do
 	return items, nil
 }
 
+func (r *postgresBidRepo) AddChecklist(ctx context.Context, bidID string, title string, sortOrder int) (*domain.BidChecklist, error) {
+	var c domain.BidChecklist
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO bid.bid_checklists (bid_id, title, sort_order)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, bid_id, title, is_done, done_by, done_at, sort_order, created_at`,
+		bidID, title, sortOrder,
+	).Scan(&c.ID, &c.BidID, &c.Title, &c.IsDone, &c.DoneBy, &c.DoneAt, &c.SortOrder, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *postgresBidRepo) UpdateChecklist(ctx context.Context, checklistID string, title *string, sortOrder *int) error {
+	sets := []string{}
+	args := []interface{}{}
+	idx := 1
+	if title != nil {
+		sets = append(sets, fmt.Sprintf("title = $%d", idx))
+		args = append(args, *title)
+		idx++
+	}
+	if sortOrder != nil {
+		sets = append(sets, fmt.Sprintf("sort_order = $%d", idx))
+		args = append(args, *sortOrder)
+		idx++
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	args = append(args, checklistID)
+	_, err := r.pool.Exec(ctx,
+		fmt.Sprintf("UPDATE bid.bid_checklists SET %s WHERE id = $%d",
+			strings.Join(sets, ", "), idx),
+		args...,
+	)
+	return err
+}
+
+func (r *postgresBidRepo) DeleteChecklist(ctx context.Context, checklistID string) error {
+	_, err := r.pool.Exec(ctx,
+		"DELETE FROM bid.bid_checklists WHERE id = $1",
+		checklistID,
+	)
+	return err
+}
+
+func (r *postgresBidRepo) ReorderChecklists(ctx context.Context, items []domain.ReorderChecklistItem) error {
+	for _, item := range items {
+		_, err := r.pool.Exec(ctx,
+			"UPDATE bid.bid_checklists SET sort_order = $1 WHERE id = $2",
+			item.SortOrder, item.ID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *postgresBidRepo) ToggleChecklist(ctx context.Context, checklistID string, isDone bool, doneBy string) error {
 	var err error
 	if isDone {

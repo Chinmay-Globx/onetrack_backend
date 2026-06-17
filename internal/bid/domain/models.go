@@ -140,6 +140,25 @@ type BidChecklistItem struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
+type AddChecklistRequest struct {
+	Title     string `json:"title" binding:"required"`
+	SortOrder *int   `json:"sort_order"`
+}
+
+type UpdateChecklistRequest struct {
+	Title     *string `json:"title"`
+	SortOrder *int    `json:"sort_order"`
+}
+
+type ReorderChecklistItem struct {
+	ID        string `json:"id" binding:"required"`
+	SortOrder int    `json:"sort_order"`
+}
+
+type ReorderChecklistRequest struct {
+	Items []ReorderChecklistItem `json:"items" binding:"required,min=1"`
+}
+
 type BidWorkspaceMember struct {
 	ID      string    `json:"id"`
 	BidID   string    `json:"bid_id"`

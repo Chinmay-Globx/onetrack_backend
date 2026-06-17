@@ -26,6 +26,10 @@ type BidRepository interface {
 	// Bid-scoped checklists
 	BulkInsertChecklists(ctx context.Context, bidID string, titles []string) error
 	GetChecklists(ctx context.Context, bidID string) ([]BidChecklist, error)
+	AddChecklist(ctx context.Context, bidID string, title string, sortOrder int) (*BidChecklist, error)
+	UpdateChecklist(ctx context.Context, checklistID string, title *string, sortOrder *int) error
+	DeleteChecklist(ctx context.Context, checklistID string) error
+	ReorderChecklists(ctx context.Context, items []ReorderChecklistItem) error
 	ToggleChecklist(ctx context.Context, checklistID string, isDone bool, doneBy string) error
 }
 
@@ -43,6 +47,10 @@ type BidService interface {
 
 	// Bid-scoped checklists
 	GetChecklists(ctx context.Context, bidID string) ([]BidChecklistItem, error)
+	AddChecklist(ctx context.Context, bidID string, req *AddChecklistRequest) (*BidChecklistItem, error)
+	UpdateChecklist(ctx context.Context, bidID string, checklistID string, req *UpdateChecklistRequest) (*BidChecklistItem, error)
+	DeleteChecklist(ctx context.Context, bidID string, checklistID string) error
+	ReorderChecklists(ctx context.Context, bidID string, req *ReorderChecklistRequest) ([]BidChecklistItem, error)
 	ToggleChecklist(ctx context.Context, bidID string, checklistID string, isDone bool, actorID string) (*BidChecklistItem, error)
 }
 

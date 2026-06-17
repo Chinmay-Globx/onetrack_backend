@@ -185,6 +185,62 @@ func (h *BidHandler) ArchiveBid(c *gin.Context) {
 	response.Success(c, http.StatusOK, "Bid archived successfully", nil)
 }
 
+func (h *BidHandler) AddChecklist(c *gin.Context) {
+	bidID := c.Param("id")
+	var req domain.AddChecklistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	item, err := h.svc.AddChecklist(c.Request.Context(), bidID, &req)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusCreated, "Checklist item added", item)
+}
+
+func (h *BidHandler) UpdateChecklist(c *gin.Context) {
+	bidID := c.Param("id")
+	checklistID := c.Param("cid")
+	var req domain.UpdateChecklistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	item, err := h.svc.UpdateChecklist(c.Request.Context(), bidID, checklistID, &req)
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Checklist item updated", item)
+}
+
+func (h *BidHandler) DeleteChecklist(c *gin.Context) {
+	bidID := c.Param("id")
+	checklistID := c.Param("cid")
+	if err := h.svc.DeleteChecklist(c.Request.Context(), bidID, checklistID); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Checklist item deleted", nil)
+}
+
+func (h *BidHandler) ReorderChecklists(c *gin.Context) {
+	bidID := c.Param("id")
+	var req domain.ReorderChecklistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+	items, err := h.svc.ReorderChecklists(c.Request.Context(), bidID, &req)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, "Checklists reordered", items)
+}
+
 func (h *BidHandler) GetChecklists(c *gin.Context) {
 	bidID := c.Param("id")
 	items, err := h.svc.GetChecklists(c.Request.Context(), bidID)
