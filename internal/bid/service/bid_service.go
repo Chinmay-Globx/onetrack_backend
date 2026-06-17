@@ -77,6 +77,7 @@ func (s *bidService) CreateBid(ctx context.Context, req *domain.CreateBidRequest
 	params.SubmissionStatus = req.SubmissionStatus
 	params.FinancialEvaluationStatus = req.FinancialEvaluationStatus
 	params.POReceivedStatus = req.POReceivedStatus
+	params.BidResult = req.BidResult
 
 	if req.TargetMonthDate != nil {
 		t, err := time.Parse(time.RFC3339, *req.TargetMonthDate)
@@ -128,7 +129,7 @@ func (s *bidService) ListBids(ctx context.Context, params domain.ListBidsParams)
 		params.Limit = 20
 	}
 
-	bids, total, err := s.repo.List(ctx, params)
+	bids, total, statusCounts, err := s.repo.List(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -143,11 +144,14 @@ func (s *bidService) ListBids(ctx context.Context, params domain.ListBidsParams)
 	}
 
 	return &domain.BidListResponse{
-		Bids:       items,
-		Total:      total,
-		Page:       params.Page,
-		Limit:      params.Limit,
-		TotalPages: int(math.Ceil(float64(total) / float64(params.Limit))),
+		Bids:        items,
+		Total:       total,
+		Page:        params.Page,
+		Limit:       params.Limit,
+		TotalPages:  int(math.Ceil(float64(total) / float64(params.Limit))),
+		ActiveCount: statusCounts["ACTIVE"],
+		WonCount:    statusCounts["WON"],
+		LostCount:   statusCounts["LOST"],
 	}, nil
 }
 
@@ -314,6 +318,16 @@ func buildBidResponse(bid *domain.BidWorkspace, owner *domain.UserSummary, membe
 		CreatedBy:        bid.CreatedBy,
 		AISourceDocumentID:     bid.AISourceDocumentID,
 		AIExtractionConfidence: bid.AIExtractionConfidence,
+		Team:                      bid.Team,
+		ScopeType:                 bid.ScopeType,
+		BGRate:                    bid.BGRate,
+		ActivityType:              bid.ActivityType,
+		TargetMonthDate:           bid.TargetMonthDate,
+		ExcelBidStatus:            bid.ExcelBidStatus,
+		SubmissionStatus:          bid.SubmissionStatus,
+		FinancialEvaluationStatus: bid.FinancialEvaluationStatus,
+		POReceivedStatus:          bid.POReceivedStatus,
+		BidResult:                 bid.BidResult,
 		CreatedAt:        bid.CreatedAt,
 		UpdatedAt:        bid.UpdatedAt,
 		ArchivedAt:       bid.ArchivedAt,
@@ -352,6 +366,9 @@ func buildBidListItem(bid *domain.BidWorkspace, owner *domain.UserSummary) domai
 		SubmissionStatus:          bid.SubmissionStatus,
 		FinancialEvaluationStatus: bid.FinancialEvaluationStatus,
 		POReceivedStatus:          bid.POReceivedStatus,
+		EMDExempted:               bid.EMDExempted,
+		HasTechEval:               bid.HasTechEval,
+		BidResult:                 bid.BidResult,
 		CreatedAt:                 bid.CreatedAt,
 	}
 }

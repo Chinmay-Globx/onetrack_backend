@@ -83,10 +83,13 @@ func (h *BidHandler) ListBids(c *gin.Context) {
 		"success": true,
 		"data":    result.Bids,
 		"meta": gin.H{
-			"page":        result.Page,
-			"limit":       result.Limit,
-			"total":       result.Total,
-			"total_pages": result.TotalPages,
+			"page":         result.Page,
+			"limit":        result.Limit,
+			"total":        result.Total,
+			"total_pages":  result.TotalPages,
+			"active_count": result.ActiveCount,
+			"won_count":    result.WonCount,
+			"lost_count":   result.LostCount,
 		},
 	})
 }
