@@ -100,6 +100,14 @@ func (s *bidService) CreateBid(ctx context.Context, req *domain.CreateBidRequest
 		TransitionedBy: createdBy,
 	})
 
+	// Auto-add bid owner as OWNER member
+	_ = s.repo.AddMember(ctx, id, req.BidOwnerID, "OWNER", createdBy)
+
+	// Auto-add technical manager as MANAGER member if set
+	if req.TechnicalManagerID != nil {
+		_ = s.repo.AddMember(ctx, id, *req.TechnicalManagerID, "MANAGER", createdBy)
+	}
+
 	// Seed checklists if provided
 	if len(req.Checklists) > 0 {
 		_ = s.repo.BulkInsertChecklists(ctx, id, req.Checklists)

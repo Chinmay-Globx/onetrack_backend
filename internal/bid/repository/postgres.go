@@ -446,7 +446,7 @@ func (r *postgresBidRepo) RemoveMember(ctx context.Context, bidID string, userID
 
 func (r *postgresBidRepo) GetMembers(ctx context.Context, bidID string) ([]domain.MemberResponse, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT m.user_id, u.full_name, u.username, m.role, m.added_at
+		SELECT m.user_id, COALESCE(u.full_name, u.username), u.username, m.role, m.added_at
 		FROM bid.bid_workspace_members m
 		JOIN auth.users u ON u.id = m.user_id
 		WHERE m.bid_id = $1
